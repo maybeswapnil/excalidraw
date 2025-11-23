@@ -96,6 +96,8 @@ import Collab, {
 import { AppFooter } from "./components/AppFooter";
 import { AppMainMenu } from "./components/AppMainMenu";
 import { AppWelcomeScreen } from "./components/AppWelcomeScreen";
+import { TabsList } from "./components/TabsList";
+import { SaveTabDialog } from "./components/SaveTabDialog";
 import {
   ExportToExcalidrawPlus,
   exportToExcalidrawPlus,
@@ -121,8 +123,12 @@ import {
   LibraryLocalStorageMigrationAdapter,
   LocalData,
   localStorageQuotaExceededAtom,
+  setAllowDBSave,
+  saveDataStateToLocalStorage,
 } from "./data/LocalData";
 import { isBrowserStorageStateNewer } from "./data/tabSync";
+import { updateBrowserStateVersion } from "./data/tabSync";
+import { getDBAdapter } from "./data/DBAdapter";
 import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
 import CollabError, { collabErrorIndicatorAtom } from "./collab/CollabError";
 import { useHandleAppTheme } from "./useHandleAppTheme";
@@ -222,11 +228,69 @@ const initializeScene = async (opts: {
   );
   const externalUrlMatch = window.location.hash.match(/^#url=(.*)$/);
 
+  // Check if loading a tab from path /tab/:uuid
+  const tabPathMatch = window.location.pathname.match(/^\/tab\/([a-zA-Z0-9_-]+)$/i);
+  let tabId = "singleton";
+
+  if (tabPathMatch) {
+    tabId = tabPathMatch[1];
+    // Save last visited tab
+    localStorage.setItem("excalidraw-last-tab", tabId);
+  } else if (window.location.pathname === "/" || window.location.pathname === "") {
+    // Check for last visited tab and redirect if found
+    const lastTabId = localStorage.getItem("excalidraw-last-tab");
+    if (lastTabId) {
+      window.history.replaceState({}, APP_NAME, `/tab/${lastTabId}`);
+      tabId = lastTabId;
+    }
+  }
+
+  // ALWAYS try to load from MongoDB first on every initialization
+  let remoteDataState = null;
+  const dbAdapter = getDBAdapter();
+  console.log("App.tsx: DBAdapter enabled:", dbAdapter?.isEnabled());
+
+  if (dbAdapter?.isEnabled()) {
+    try {
+      // Configure DBAdapter with the current tab ID
+      if (dbAdapter.setTabId) {
+        dbAdapter.setTabId(tabId);
+      }
+
+      remoteDataState = await dbAdapter.loadDataState();
+      // If MongoDB has data, use it and update localStorage
+      if (remoteDataState && remoteDataState.elements && remoteDataState.elements.length > 0) {
+        try {
+          localStorage.setItem(
+            STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS,
+            JSON.stringify(remoteDataState.elements)
+          );
+          localStorage.setItem(
+            STORAGE_KEYS.LOCAL_STORAGE_APP_STATE,
+            JSON.stringify(remoteDataState.appState ?? {})
+          );
+          updateBrowserStateVersion(STORAGE_KEYS.VERSION_DATA_STATE);
+          // Small delay to ensure localStorage is written before scene loads
+          await new Promise(resolve => setTimeout(resolve, 50));
+        } catch (error) {
+          console.error("Failed to update localStorage from MongoDB:", error);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load from MongoDB:", error);
+    }
+  }
+
+  // Priority: remoteData > localData
   const localDataState = importFromLocalStorage();
+  const dataStateForScene = remoteDataState || localDataState;
+
+  // eslint-disable-next-line no-console
+  console.log("Loading scene with elements count:", dataStateForScene?.elements?.length || 0, "from:", remoteDataState ? "MongoDB" : "localStorage");
 
   let scene: RestoredDataState & {
     scrollToContent?: boolean;
-  } = await loadScene(null, null, localDataState);
+  } = await loadScene(null, null, dataStateForScene);
 
   let roomLinkData = getCollaborationLinkData(window.location.href);
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);
@@ -328,11 +392,11 @@ const initializeScene = async (opts: {
   } else if (scene) {
     return isExternalScene && jsonBackendMatch
       ? {
-          scene,
-          isExternalScene,
-          id: jsonBackendMatch[1],
-          key: jsonBackendMatch[2],
-        }
+        scene,
+        isExternalScene,
+        id: jsonBackendMatch[1],
+        key: jsonBackendMatch[2],
+      }
       : { scene, isExternalScene: false };
   }
   return { scene: null, isExternalScene: false };
@@ -340,6 +404,8 @@ const initializeScene = async (opts: {
 
 const ExcalidrawWrapper = () => {
   const [errorMessage, setErrorMessage] = useState("");
+  const [isTabsListOpen, setIsTabsListOpen] = useState(false);
+  const [isSaveTabDialogOpen, setIsSaveTabDialogOpen] = useState(false);
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -360,6 +426,7 @@ const ExcalidrawWrapper = () => {
   }
 
   const debugCanvasRef = useRef<HTMLCanvasElement>(null);
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     trackEvent("load", "frame", getFrame());
@@ -476,8 +543,53 @@ const ExcalidrawWrapper = () => {
     };
 
     initializeScene({ collabAPI, excalidrawAPI }).then(async (data) => {
-      loadImages(data, /* isInitialLoad */ true);
-      initialStatePromiseRef.current.promise.resolve(data.scene);
+      // Pause saves during initial scene load to prevent overwriting DB with
+      // empty state from onChange callbacks
+      LocalData.pauseSave("initial-load");
+      try {
+        loadImages(data, /* isInitialLoad */ true);
+        initialStatePromiseRef.current.promise.resolve(data.scene);
+        // Only allow DB saves if initial load had elements
+        setAllowDBSave(!!(data.scene && data.scene.elements && data.scene.elements.length > 0));
+
+        // Register callback for remote canvas updates
+        const dbAdapter = getDBAdapter();
+        if (dbAdapter?.isEnabled()) {
+          dbAdapter.onRemoteUpdate((remoteData) => {
+            // Update scene with remote data when other clients make changes
+            if (excalidrawAPI && remoteData.elements) {
+              // Restore appState to ensure collaborators is a Map
+              const restoredAppState = restoreAppState(remoteData.appState, null);
+
+              excalidrawAPI.updateScene({
+                elements: remoteData.elements,
+                appState: restoredAppState,
+                captureUpdate: CaptureUpdateAction.NEVER,
+              });
+              // Also update localStorage to keep it in sync
+              try {
+                localStorage.setItem(
+                  STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS,
+                  JSON.stringify(remoteData.elements)
+                );
+                localStorage.setItem(
+                  STORAGE_KEYS.LOCAL_STORAGE_APP_STATE,
+                  JSON.stringify(remoteData.appState ?? {})
+                );
+                updateBrowserStateVersion(STORAGE_KEYS.VERSION_DATA_STATE);
+              } catch (error) {
+                console.error("Failed to update localStorage from remote update:", error);
+              }
+            }
+          });
+        }
+      } finally {
+        // Resume saves after initial load completes
+        LocalData.resumeSave("initial-load");
+        setTimeout(() => {
+          isInitialLoadRef.current = false;
+        }, 100);
+      }
     });
 
     const onHashChange = async (event: HashChangeEvent) => {
@@ -513,7 +625,7 @@ const ExcalidrawWrapper = () => {
         !document.hidden &&
         ((collabAPI && !collabAPI.isCollaborating()) || isCollabDisabled)
       ) {
-        // don't sync if local state is newer or identical to browser state
+        // Just check localStorage for updates (DB is already loaded on init)
         if (isBrowserStorageStateNewer(STORAGE_KEYS.VERSION_DATA_STATE)) {
           const localDataState = importFromLocalStorage();
           const username = importUsernameFromLocalStorage();
@@ -635,6 +747,8 @@ const ExcalidrawWrapper = () => {
     // this check is redundant, but since this is a hot path, it's best
     // not to evaludate the nested expression every time
     if (!LocalData.isSavePaused()) {
+      // If user creates content, allow DB saves from now on
+      if (elements.length > 0) setAllowDBSave(true);
       LocalData.save(elements, appState, files, () => {
         if (excalidrawAPI) {
           let didChange = false;
@@ -678,6 +792,26 @@ const ExcalidrawWrapper = () => {
   const [latestShareableLink, setLatestShareableLink] = useState<string | null>(
     null,
   );
+
+  // Auto-save current tab when editing
+  useEffect(() => {
+    if (!excalidrawAPI) return;
+
+    const tabPathMatch = window.location.pathname.match(/^\/tab\/([a-f0-9]+)$/i);
+    if (!tabPathMatch) return;
+
+    const tabId = tabPathMatch[1];
+    const autoSaveTimer = setInterval(async () => {
+      const { getTabsService } = await import("./data/tabsService");
+      const tabsService = getTabsService();
+      await tabsService.updateTab(tabId, {
+        elements: Array.from(excalidrawAPI.getSceneElements()),
+        appState: excalidrawAPI.getAppState(),
+      });
+    }, 5000); // Auto-save every 5 seconds
+
+    return () => clearInterval(autoSaveTimer);
+  }, [excalidrawAPI]);
 
   const onExportToBackend = async (
     exportedElements: readonly NonDeletedExcalidrawElement[],
@@ -768,8 +902,7 @@ const ExcalidrawWrapper = () => {
     keywords: ["plus", "cloud", "server"],
     perform: () => {
       window.open(
-        `${
-          import.meta.env.VITE_APP_PLUS_LP
+        `${import.meta.env.VITE_APP_PLUS_LP
         }/plus?utm_source=excalidraw&utm_medium=app&utm_content=command_palette`,
         "_blank",
       );
@@ -791,8 +924,7 @@ const ExcalidrawWrapper = () => {
     ],
     perform: () => {
       window.open(
-        `${
-          import.meta.env.VITE_APP_PLUS_APP
+        `${import.meta.env.VITE_APP_PLUS_APP
         }?utm_source=excalidraw&utm_medium=app&utm_content=command_palette`,
         "_blank",
       );
@@ -819,27 +951,27 @@ const ExcalidrawWrapper = () => {
               onExportToBackend,
               renderCustomUI: excalidrawAPI
                 ? (elements, appState, files) => {
-                    return (
-                      <ExportToExcalidrawPlus
-                        elements={elements}
-                        appState={appState}
-                        files={files}
-                        name={excalidrawAPI.getName()}
-                        onError={(error) => {
-                          excalidrawAPI?.updateScene({
-                            appState: {
-                              errorMessage: error.message,
-                            },
-                          });
-                        }}
-                        onSuccess={() => {
-                          excalidrawAPI.updateScene({
-                            appState: { openDialog: null },
-                          });
-                        }}
-                      />
-                    );
-                  }
+                  return (
+                    <ExportToExcalidrawPlus
+                      elements={elements}
+                      appState={appState}
+                      files={files}
+                      name={excalidrawAPI.getName()}
+                      onError={(error) => {
+                        excalidrawAPI?.updateScene({
+                          appState: {
+                            errorMessage: error.message,
+                          },
+                        });
+                      }}
+                      onSuccess={() => {
+                        excalidrawAPI.updateScene({
+                          appState: { openDialog: null },
+                        });
+                      }}
+                    />
+                  );
+                }
                 : undefined,
             },
           },
@@ -888,6 +1020,8 @@ const ExcalidrawWrapper = () => {
           theme={appTheme}
           setTheme={(theme) => setAppTheme(theme)}
           refresh={() => forceRefresh((prev) => !prev)}
+          onViewTabsClick={() => setIsTabsListOpen(true)}
+          onSaveAsTabClick={() => setIsSaveTabDialogOpen(true)}
         />
         <AppWelcomeScreen
           onCollabDialogOpen={onCollabDialogOpen}
@@ -954,6 +1088,15 @@ const ExcalidrawWrapper = () => {
             }
           }}
         />
+
+        {excalidrawAPI && (
+          <SaveTabDialog
+            isOpen={isSaveTabDialogOpen}
+            onClose={() => setIsSaveTabDialogOpen(false)}
+            elements={excalidrawAPI.getSceneElements()}
+            appState={excalidrawAPI.getAppState()}
+          />
+        )}
 
         <AppSidebar />
 
@@ -1103,11 +1246,11 @@ const ExcalidrawWrapper = () => {
             },
             ...(isExcalidrawPlusSignedUser
               ? [
-                  {
-                    ...ExcalidrawPlusAppCommand,
-                    label: "Sign in / Go to Excalidraw+",
-                  },
-                ]
+                {
+                  ...ExcalidrawPlusAppCommand,
+                  label: "Sign in / Go to Excalidraw+",
+                },
+              ]
               : [ExcalidrawPlusCommand, ExcalidrawPlusAppCommand]),
 
             {
@@ -1172,11 +1315,11 @@ const ExcalidrawApp = () => {
   }
 
   return (
-    <TopErrorBoundary>
-      <Provider store={appJotaiStore}>
+    <Provider store={appJotaiStore}>
+      <TopErrorBoundary>
         <ExcalidrawWrapper />
-      </Provider>
-    </TopErrorBoundary>
+      </TopErrorBoundary>
+    </Provider>
   );
 };
 

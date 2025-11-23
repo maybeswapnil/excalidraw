@@ -1,0 +1,79 @@
+.PHONY: help docker-up docker-down docker-logs docker-build docker-clean docker-health
+
+# Colors for output
+BLUE := \033[0;34m
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+NC := \033[0m # No Color
+
+help:
+	@echo "$(BLUE)Excalidraw Backend - Makefile Commands$(NC)"
+	@echo ""
+	@echo "$(GREEN)Docker Commands:$(NC)"
+	@echo "  make docker-up           - Start backend and MongoDB with Docker Compose"
+	@echo "  make docker-down         - Stop all Docker services"
+	@echo "  make docker-logs         - View logs from all services"
+	@echo "  make docker-build        - Rebuild Docker images"
+	@echo "  make docker-clean        - Remove containers and volumes (clean reset)"
+	@echo "  make docker-health       - Check health of services"
+	@echo ""
+	@echo "$(GREEN)Development Commands:$(NC)"
+	@echo "  make backend-dev         - Run backend in development mode (locally)"
+	@echo "  make backend-start       - Build and start everything"
+	@echo ""
+
+docker-up:
+	@echo "$(BLUE)Starting Docker services...$(NC)"
+	docker-compose -f docker-compose.backend.yml up -d
+	@echo "$(GREEN)✓ Services started$(NC)"
+	@echo "  Backend: http://localhost:5000"
+	@echo "  MongoDB: localhost:27017"
+
+docker-down:
+	@echo "$(BLUE)Stopping Docker services...$(NC)"
+	docker-compose -f docker-compose.backend.yml down
+	@echo "$(GREEN)✓ Services stopped$(NC)"
+
+docker-logs:
+	@echo "$(BLUE)Showing Docker logs (press Ctrl+C to exit)...$(NC)"
+	docker-compose -f docker-compose.backend.yml logs -f
+
+docker-build:
+	@echo "$(BLUE)Building Docker images...$(NC)"
+	docker-compose -f docker-compose.backend.yml build --no-cache
+	@echo "$(GREEN)✓ Build complete$(NC)"
+
+docker-clean:
+	@echo "$(YELLOW)WARNING: This will remove all containers and volumes!$(NC)"
+	@read -p "Continue? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		echo "$(BLUE)Cleaning up...$(NC)"; \
+		docker-compose -f docker-compose.backend.yml down -v; \
+		echo "$(GREEN)✓ Clean complete$(NC)"; \
+	else \
+		echo "$(YELLOW)Cancelled$(NC)"; \
+	fi
+
+docker-health:
+	@echo "$(BLUE)Checking service health...$(NC)"
+	@echo ""
+	@echo "Backend health:"
+	@curl -s http://localhost:5000/health | jq '.' || echo "$(YELLOW)⚠ Backend not responding$(NC)"
+	@echo ""
+	@echo "MongoDB status:"
+	@docker-compose -f docker-compose.backend.yml exec -T mongodb mongosh -u admin -p password --authenticationDatabase admin --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok" && echo "$(GREEN)✓ MongoDB OK$(NC)" || echo "$(YELLOW)⚠ MongoDB not responding$(NC)"
+	@echo ""
+	@echo "Container status:"
+	@docker-compose -f docker-compose.backend.yml ps
+
+backend-dev:
+	@echo "$(BLUE)Starting backend in development mode...$(NC)"
+	cd backend && npm run dev
+
+backend-start: docker-up
+	@echo "$(GREEN)✓ Backend is running!$(NC)"
+	@sleep 2
+	@make docker-health
+
+.DEFAULT_GOAL := help

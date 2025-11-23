@@ -11,6 +11,10 @@ interface ImportMetaEnv {
   // collaboration WebSocket server (https: string
   VITE_APP_WS_SERVER_URL: string;
 
+  // Remote sync backend configuration
+  VITE_REMOTE_SYNC_ENDPOINT: string;
+  VITE_ENABLE_REMOTE_SYNC: string;
+
   // set this only if using the collaboration workflow we use on excalidraw.com
   VITE_APP_PORTAL_URL: string;
   VITE_APP_AI_BACKEND: string;

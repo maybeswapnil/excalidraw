@@ -802,6 +802,10 @@ export const restoreAppState = (
       isFiniteNumber(appState.gridStep) ? appState.gridStep : DEFAULT_GRID_STEP,
     ),
     editingFrame: null,
+    // Ensure collaborators is always a Map (in case it was deserialized from JSON)
+    collaborators: nextAppState.collaborators instanceof Map
+      ? nextAppState.collaborators
+      : new Map(),
   };
 };
 

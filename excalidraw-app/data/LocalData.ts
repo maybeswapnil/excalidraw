@@ -44,6 +44,13 @@ import { SAVE_TO_LOCAL_STORAGE_TIMEOUT, STORAGE_KEYS } from "../app_constants";
 import { FileManager } from "./FileManager";
 import { Locker } from "./Locker";
 import { updateBrowserStateVersion } from "./tabSync";
+import { getDBAdapter } from "./DBAdapter";
+
+// Tracks if initial load from DB was empty
+let allowDBSave = false;
+export function setAllowDBSave(val: boolean) {
+  allowDBSave = val;
+}
 
 const filesStore = createStore("files-db", "files-store");
 
@@ -69,7 +76,7 @@ class LocalFileManager extends FileManager {
   };
 }
 
-const saveDataStateToLocalStorage = (
+export const saveDataStateToLocalStorage = (
   elements: readonly ExcalidrawElement[],
   appState: AppState,
 ) => {
@@ -111,7 +118,7 @@ const isQuotaExceededError = (error: any) => {
   return error instanceof DOMException && error.name === "QuotaExceededError";
 };
 
-type SavingLockTypes = "collaboration";
+type SavingLockTypes = "collaboration" | "initial-load";
 
 export class LocalData {
   private static _save = debounce(
@@ -128,6 +135,25 @@ export class LocalData {
         files,
       });
       onFilesSaved();
+
+      // Push to remote DB (best-effort, fire-and-forget)
+      const dbAdapter = getDBAdapter();
+        if (dbAdapter?.isEnabled() && allowDBSave) {
+          try {
+            if (elements.length > 0) {
+              await dbAdapter.saveDataState({
+                dataState: {
+                  elements,
+                  appState,
+                },
+                timestamp: Date.now(),
+                clientId: "",
+              });
+            }
+          } catch (error) {
+            // Continue; local save already succeeded
+          }
+        }
     },
     SAVE_TO_LOCAL_STORAGE_TIMEOUT,
   );
