@@ -6,7 +6,7 @@ import {
 } from "@excalidraw/excalidraw/components/icons";
 import { LinkButton } from "@excalidraw/excalidraw/components/LinkButton";
 import { useUIAppState } from "@excalidraw/excalidraw/context/ui-appState";
-import { TabsList } from "./TabsList";
+import TabsMenuItems from "./TabsMenuItems";
 
 import "./AppSidebar.scss";
 
@@ -37,7 +37,7 @@ export const AppSidebar = () => {
         </Sidebar.TabTrigger>
       </DefaultSidebar.TabTriggers>
       <Sidebar.Tab tab="tabs">
-        <TabsList />
+        <TabsMenuItems />
       </Sidebar.Tab>
       <Sidebar.Tab tab="comments">
         <div className="app-sidebar-promo-container">

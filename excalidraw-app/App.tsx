@@ -96,7 +96,6 @@ import Collab, {
 import { AppFooter } from "./components/AppFooter";
 import { AppMainMenu } from "./components/AppMainMenu";
 import { AppWelcomeScreen } from "./components/AppWelcomeScreen";
-import { TabsList } from "./components/TabsList";
 import { SaveTabDialog } from "./components/SaveTabDialog";
 import {
   ExportToExcalidrawPlus,
