@@ -16,10 +16,10 @@ class TabsServiceImpl {
 
   constructor() {
     // Get backend URL from environment or default to localhost
-    const endpoint = import.meta.env.VITE_REMOTE_SYNC_ENDPOINT || "ws://localhost:5000";
+    const endpoint = "https://darling-sincerely-crab.ngrok-free.app";
     // Convert ws:// to http:// or wss:// to https://
     this.baseUrl = endpoint
-      .replace(/^wss?:\/\//, (match) => (match === "wss://" ? "https://" : "http://"))
+      .replace(/^wss?:\/\//, (match: string) => (match === "wss://" ? "https://" : "http://"))
       .replace(/\/$/, ""); // Remove trailing slash
   }
 
@@ -28,7 +28,7 @@ class TabsServiceImpl {
    */
   async getAllTabs(): Promise<Tab[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/tabs`);
+      const response = await fetch(`${this.baseUrl}/api/tabs`, { headers: { 'ngrok-skip-browser-warning': 'true' } });
       if (!response.ok) throw new Error("Failed to fetch tabs");
       const data = await response.json();
       return data.tabs || [];
@@ -43,7 +43,7 @@ class TabsServiceImpl {
    */
   async getTab(id: string): Promise<Tab | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/tabs/${id}`);
+      const response = await fetch(`${this.baseUrl}/api/tabs/${id}`, { headers: { 'ngrok-skip-browser-warning': 'true' } });
       if (!response.ok) {
         if (response.status === 404) return null;
         throw new Error("Failed to fetch tab");
@@ -63,7 +63,7 @@ class TabsServiceImpl {
     try {
       const response = await fetch(`${this.baseUrl}/api/tabs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
         body: JSON.stringify({ name, elements, appState }),
       });
       if (!response.ok) throw new Error("Failed to create tab");
@@ -82,7 +82,7 @@ class TabsServiceImpl {
     try {
       const response = await fetch(`${this.baseUrl}/api/tabs/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
         body: JSON.stringify(updates),
       });
       if (!response.ok) throw new Error("Failed to update tab");
@@ -100,6 +100,7 @@ class TabsServiceImpl {
     try {
       const response = await fetch(`${this.baseUrl}/api/tabs/${id}`, {
         method: "DELETE",
+        headers: { "ngrok-skip-browser-warning": "true" },
       });
       if (!response.ok) throw new Error("Failed to delete tab");
       return true;

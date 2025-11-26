@@ -35,7 +35,7 @@ cp backend/.env.example backend/.env
 docker-compose -f docker-compose.backend.yml up -d
 
 # Verify
-curl http://localhost:5000/health
+curl http://192.168.1.100:5001/health
 ```
 
 ### 2. **Using Makefile (Easier)**

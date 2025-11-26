@@ -14,7 +14,7 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_ENABLE_REMOTE_SYNC=true
-      - VITE_REMOTE_SYNC_ENDPOINT=http://localhost:5000
+      - VITE_REMOTE_SYNC_ENDPOINT=https://darling-sincerely-crab.ngrok-free.app
     volumes:
       - ./:/opt/node_app/app:delegated
       - ./package.json:/opt/node_app/package.json

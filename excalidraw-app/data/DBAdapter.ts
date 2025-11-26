@@ -311,8 +311,8 @@ export const initDBAdapter = (config: DBAdapterConfig) => {
 
 export const getDBAdapter = (): DBAdapterImpl | null => {
   if (!dbAdapterInstance) {
-    const endpoint = import.meta.env.VITE_REMOTE_SYNC_ENDPOINT || "";
-    const enabled = import.meta.env.VITE_ENABLE_REMOTE_SYNC === "true";
+    const endpoint = "https://darling-sincerely-crab.ngrok-free.app";
+    const enabled = true;
 
     if (enabled && endpoint) {
       dbAdapterInstance = new DBAdapterImpl({ endpoint, enabled: true });

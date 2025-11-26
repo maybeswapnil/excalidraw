@@ -39,7 +39,7 @@ class WebhookAdapterImpl {
     try {
       const response = await fetch(`${this.serverUrl}/webhooks/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
         body: JSON.stringify({
           clientId: this.clientId,
           webhookUrl,
@@ -77,7 +77,7 @@ class WebhookAdapterImpl {
     try {
       const response = await fetch(`${this.serverUrl}/webhooks/unregister`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
         body: JSON.stringify({ webhookId: this.webhookId }),
       });
 
@@ -155,8 +155,8 @@ let webhookAdapterInstance: WebhookAdapterImpl | null = null;
  */
 export const getWebhookAdapter = (): WebhookAdapterImpl | null => {
   if (!webhookAdapterInstance) {
-    const serverUrl = import.meta.env.VITE_REMOTE_SYNC_ENDPOINT || "";
-    const enabled = import.meta.env.VITE_ENABLE_REMOTE_SYNC === "true";
+    const serverUrl = "https://darling-sincerely-crab.ngrok-free.app";
+    const enabled = true;
     const clientId =
       localStorage.getItem("__excalidraw_client_id") ||
       `client_${Date.now()}_${Math.random().toString(36).slice(2)}`;

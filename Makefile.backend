@@ -26,7 +26,7 @@ docker-up:
 	@echo "$(BLUE)Starting Docker services...$(NC)"
 	docker-compose -f docker-compose.backend.yml up -d
 	@echo "$(GREEN)✓ Services started$(NC)"
-	@echo "  Backend: http://localhost:5000"
+	@echo "  Backend: http://192.168.1.100:5001"
 	@echo "  MongoDB: localhost:27017"
 
 docker-down:
@@ -59,7 +59,7 @@ docker-health:
 	@echo "$(BLUE)Checking service health...$(NC)"
 	@echo ""
 	@echo "Backend health:"
-	@curl -s http://localhost:5000/health | jq '.' || echo "$(YELLOW)⚠ Backend not responding$(NC)"
+	@curl -s http://192.168.1.100:5001/health | jq '.' || echo "$(YELLOW)⚠ Backend not responding$(NC)"
 	@echo ""
 	@echo "MongoDB status:"
 	@docker-compose -f docker-compose.backend.yml exec -T mongodb mongosh -u admin -p password --authenticationDatabase admin --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok" && echo "$(GREEN)✓ MongoDB OK$(NC)" || echo "$(YELLOW)⚠ MongoDB not responding$(NC)"
