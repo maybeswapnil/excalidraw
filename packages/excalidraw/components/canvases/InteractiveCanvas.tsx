@@ -159,6 +159,8 @@ const InteractiveCanvas = (props: InteractiveCanvasProps) => {
         remotePointerUserStates,
         selectionColor,
         renderScrollbars: props.renderScrollbars,
+        // NOTE not memoized on so we don't rerender on cursor move
+        lastViewportPosition: props.app.lastViewportPosition,
       },
       editorInterface: props.editorInterface,
       callback: props.renderInteractiveSceneCallback,
@@ -244,8 +246,9 @@ const getRelevantAppStateProps = (
   selectedGroupIds: appState.selectedGroupIds,
   selectedLinearElement: appState.selectedLinearElement,
   multiElement: appState.multiElement,
+  newElement: appState.newElement,
   isBindingEnabled: appState.isBindingEnabled,
-  suggestedBindings: appState.suggestedBindings,
+  suggestedBinding: appState.suggestedBinding,
   isRotating: appState.isRotating,
   elementsToHighlight: appState.elementsToHighlight,
   collaborators: appState.collaborators, // Necessary for collab. sessions
@@ -257,6 +260,10 @@ const getRelevantAppStateProps = (
   croppingElementId: appState.croppingElementId,
   searchMatches: appState.searchMatches,
   activeLockedId: appState.activeLockedId,
+  hoveredElementIds: appState.hoveredElementIds,
+  frameRendering: appState.frameRendering,
+  shouldCacheIgnoreZoom: appState.shouldCacheIgnoreZoom,
+  exportScale: appState.exportScale,
 });
 
 const areEqual = (
