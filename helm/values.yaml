@@ -1,0 +1,16 @@
+frontend:
+  image:
+    repository: excalidraw-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+backend:
+  image:
+    repository: excalidraw-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 5000
