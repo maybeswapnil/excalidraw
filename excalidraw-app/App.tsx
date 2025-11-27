@@ -260,14 +260,12 @@ const initializeScene = async (opts: {
       // If MongoDB has data, use it and update localStorage
       if (remoteDataState && remoteDataState.elements && remoteDataState.elements.length > 0) {
         try {
+          // Only sync elements, not appState (preserve local view settings)
           localStorage.setItem(
             STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS,
             JSON.stringify(remoteDataState.elements)
           );
-          localStorage.setItem(
-            STORAGE_KEYS.LOCAL_STORAGE_APP_STATE,
-            JSON.stringify(remoteDataState.appState ?? {})
-          );
+          // Don't update appState - keep local view settings
           updateBrowserStateVersion(STORAGE_KEYS.VERSION_DATA_STATE);
           // Small delay to ensure localStorage is written before scene loads
           await new Promise(resolve => setTimeout(resolve, 50));
@@ -556,25 +554,20 @@ const ExcalidrawWrapper = () => {
         if (dbAdapter?.isEnabled()) {
           dbAdapter.onRemoteUpdate((remoteData) => {
             // Update scene with remote data when other clients make changes
+            // Only sync elements, not appState (to preserve local view settings)
             if (excalidrawAPI && remoteData.elements) {
-              // Restore appState to ensure collaborators is a Map
-              const restoredAppState = restoreAppState(remoteData.appState, null);
-
               excalidrawAPI.updateScene({
                 elements: remoteData.elements,
-                appState: restoredAppState,
+                // Don't update appState - keep local view settings
                 captureUpdate: CaptureUpdateAction.NEVER,
               });
-              // Also update localStorage to keep it in sync
+              // Also update localStorage elements to keep them in sync
               try {
                 localStorage.setItem(
                   STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS,
                   JSON.stringify(remoteData.elements)
                 );
-                localStorage.setItem(
-                  STORAGE_KEYS.LOCAL_STORAGE_APP_STATE,
-                  JSON.stringify(remoteData.appState ?? {})
-                );
+                // Don't update appState in localStorage - keep local settings
                 updateBrowserStateVersion(STORAGE_KEYS.VERSION_DATA_STATE);
               } catch (error) {
                 console.error("Failed to update localStorage from remote update:", error);

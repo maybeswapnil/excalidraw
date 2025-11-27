@@ -136,7 +136,8 @@ export class LocalData {
       });
       onFilesSaved();
 
-      // Push to remote DB (best-effort, fire-and-forget)
+      // Push elements to remote DB (best-effort, fire-and-forget)
+      // Note: Only elements are synced, not appState or other canvas config
       const dbAdapter = getDBAdapter();
         if (dbAdapter?.isEnabled() && allowDBSave) {
           try {
@@ -144,7 +145,7 @@ export class LocalData {
               await dbAdapter.saveDataState({
                 dataState: {
                   elements,
-                  appState,
+                  appState: {} as AppState, // Only sync elements, not appState
                 },
                 timestamp: Date.now(),
                 clientId: "",
